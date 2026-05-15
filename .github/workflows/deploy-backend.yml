@@ -44,16 +44,31 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Check Lambda exists
+        id: lambda_check
+        run: |
+          FUNCTION_NAME="${{ secrets.LAMBDA_FUNCTION_NAME }}"
+          if aws lambda get-function --function-name "$FUNCTION_NAME" \
+              --query 'Configuration.FunctionName' --output text 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Lambda '$FUNCTION_NAME' not found — run terraform apply first to create it."
+          fi
 
       - name: Build Lambda package
+        if: steps.lambda_check.outputs.exists == 'true'
         run: |
           mkdir -p dist/package
           pip install -r backend/requirements.txt -t dist/package/ --quiet
           cp -r backend/handler.py backend/handlers backend/shared dist/package/
-          cd dist/package && zip -r ../../dist/lambda.zip . -x "**/__pycache__/*" -x "*.pyc"
+          cd dist/package && zip -r ../../dist/lambda.zip . \
+            -x "**/__pycache__/*" -x "*.pyc" -x "*.dist-info/*"
 
       - name: Deploy Lambda
+        if: steps.lambda_check.outputs.exists == 'true'
         run: |
           aws lambda update-function-code \
             --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }} \
@@ -62,7 +77,13 @@ jobs:
             --query 'FunctionArn' \
             --output text
 
-      - name: Wait for update to complete
+      - name: Wait for update
+        if: steps.lambda_check.outputs.exists == 'true'
         run: |
           aws lambda wait function-updated \
             --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }}
+
+      - name: Skip notice
+        if: steps.lambda_check.outputs.exists == 'false'
+        run: |
+          echo "::warning::Lambda function does not exist yet. Run the Terraform workflow first, then re-run this workflow."
