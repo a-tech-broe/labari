@@ -5,6 +5,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  transpilePackages: ['react-markdown', 'remark-gfm'],
 }
 
 export default nextConfig
