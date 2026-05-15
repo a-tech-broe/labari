@@ -225,6 +225,13 @@ jobs:
           aws lambda wait function-updated \
             --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }}
 
+      - name: Seed admin accounts
+        if: steps.lambda_check.outputs.exists == 'true'
+        run: python backend/seed/seed_admins.py
+        env:
+          API_URL:        ${{ secrets.NEXT_PUBLIC_API_URL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+
       - name: Skip notice
         if: steps.lambda_check.outputs.exists == 'false'
         run: echo "::warning::Lambda not found. Run the Terraform workflow first."
