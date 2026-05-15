@@ -271,40 +271,50 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region:            ${{ secrets.AWS_REGION }}
 
-      - name: Check S3 bucket exists
-        id: infra_check
+      - name: Resolve deployment targets
+        id: targets
         run: |
+          # Use secrets if set, otherwise derive from AWS
           BUCKET="${{ secrets.FRONTEND_BUCKET }}"
+          if [ -z "$BUCKET" ]; then
+            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            BUCKET="labari-prod-frontend-${ACCOUNT_ID}"
+            echo "Derived bucket: $BUCKET"
+          fi
+
           DIST_ID="${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}"
-          if [ -z "$BUCKET" ] || [ -z "$DIST_ID" ]; then
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "FRONTEND_BUCKET or CLOUDFRONT_DISTRIBUTION_ID not set."
-          elif aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
+          if [ -z "$DIST_ID" ]; then
+            DOMAIN="${{ secrets.DOMAIN_NAME }}"
+            DIST_ID=$(aws cloudfront list-distributions \
+              --query "DistributionList.Items[?contains(Aliases.Items, '${DOMAIN}')].Id" \
+              --output text)
+            echo "Derived distribution: $DIST_ID"
+          fi
+
+          if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null && [ -n "$DIST_ID" ]; then
+            echo "exists=true"  >> "$GITHUB_OUTPUT"
+            echo "bucket=$BUCKET"   >> "$GITHUB_OUTPUT"
+            echo "dist_id=$DIST_ID" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Bucket '$BUCKET' not found."
+            echo "::warning::Infrastructure not ready (bucket=$BUCKET, dist=$DIST_ID). Run Terraform first."
           fi
 
       - name: Sync to S3
-        if: steps.infra_check.outputs.exists == 'true'
+        if: steps.targets.outputs.exists == 'true'
         run: |
-          aws s3 sync out/ s3://${{ secrets.FRONTEND_BUCKET }}/ \
+          aws s3 sync out/ s3://${{ steps.targets.outputs.bucket }}/ \
             --delete \
             --cache-control "public,max-age=31536000,immutable" \
             --exclude "*.html"
-          aws s3 sync out/ s3://${{ secrets.FRONTEND_BUCKET }}/ \
+          aws s3 sync out/ s3://${{ steps.targets.outputs.bucket }}/ \
             --delete \
             --cache-control "public,max-age=0,must-revalidate" \
             --include "*.html"
 
       - name: Invalidate CloudFront cache
-        if: steps.infra_check.outputs.exists == 'true'
+        if: steps.targets.outputs.exists == 'true'
         run: |
           aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --distribution-id ${{ steps.targets.outputs.dist_id }} \
             --paths "/*"
-
-      - name: Skip notice
-        if: steps.infra_check.outputs.exists == 'false'
-        run: echo "::warning::S3 bucket not found. Run the Terraform workflow first."
