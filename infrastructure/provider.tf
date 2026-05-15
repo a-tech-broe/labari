@@ -12,17 +12,13 @@ terraform {
     }
   }
 
-  # Uncomment to enable remote state (recommended for team use)
-  # First create the S3 bucket and DynamoDB table manually, then run:
-  #   terraform init -reconfigure
-  #
-  # backend "s3" {
-  #   bucket         = "labari-terraform-state-<your-account-id>"
-  #   key            = "infrastructure/terraform.tfstate"
-  #   region         = "us-east-1"
-  #   dynamodb_table = "labari-terraform-locks"
-  #   encrypt        = true
-  # }
+  # Bucket and table names are supplied via backend.hcl (local) or
+  # -backend-config flags (CI) so they stay out of source control.
+  # Run: terraform init -backend-config=backend.hcl
+  backend "s3" {
+    key     = "infrastructure/terraform.tfstate"
+    encrypt = true
+  }
 }
 
 provider "aws" {

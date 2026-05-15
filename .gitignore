@@ -4,6 +4,7 @@
 *.tfstate.*
 *.tfvars
 *.tfvars.json
+infrastructure/backend.hcl
 .terraform.tfstate.lock.info
 .terraform.lock.hcl
 *.tfplan

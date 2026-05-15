@@ -144,7 +144,11 @@ labari/
 cp infrastructure/terraform.tfvars.example infrastructure/terraform.tfvars
 # Fill in domain_name, alert_email, etc.
 
-make tf-init
+cp infrastructure/backend.hcl.example infrastructure/backend.hcl
+# Fill in your existing S3 bucket name and DynamoDB lock table name.
+# See backend.hcl.example for the AWS CLI commands to create them.
+
+make tf-init   # runs: terraform init -backend-config=backend.hcl
 make tf-plan
 make tf-apply
 ```
@@ -200,6 +204,9 @@ Set these repository secrets (`Settings → Secrets → Actions`):
 | ------ | ----- |
 | `AWS_ACCESS_KEY_ID` | IAM user access key |
 | `AWS_SECRET_ACCESS_KEY` | IAM user secret |
+| `AWS_REGION` | e.g. `us-east-1` |
+| `TF_STATE_BUCKET` | Existing S3 bucket name for Terraform state |
+| `TF_LOCK_TABLE` | Existing DynamoDB table name for state locking |
 | `DOMAIN_NAME` | e.g. `labari.com` |
 | `ALERT_EMAIL` | CloudWatch alarm recipient |
 | `LAMBDA_FUNCTION_NAME` | `terraform output lambda_function_name` |
