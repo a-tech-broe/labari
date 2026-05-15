@@ -52,9 +52,10 @@ jobs:
           DOMAIN_NAME: ${{ secrets.DOMAIN_NAME }}
           ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
 
-      # Build the Lambda zip so Terraform can read it during plan.
-      # The backend deploy workflow also builds and deploys it, but Terraform
-      # needs the file to exist to create/update the aws_lambda_function resource.
+      # Build the Lambda zip so Terraform can use the full package (with deps).
+      # If this step is skipped, Terraform falls back to a source-only zip via
+      # archive_file — infra is created but the Lambda won't work until the
+      # backend deploy workflow runs and pushes the full zip.
       - name: Build Lambda package
         working-directory: ${{ github.workspace }}
         run: |
@@ -63,6 +64,7 @@ jobs:
           cp -r backend/handler.py backend/handlers backend/shared dist/packages/
           cd dist/packages && zip -r ../../dist/lambda.zip . \
             -x "**/__pycache__/*" -x "*.pyc" -x "*.dist-info/*"
+          echo "Lambda zip built: $(du -sh ../dist/lambda.zip | cut -f1)"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
