@@ -19,7 +19,7 @@ build-simple:
 	cd dist/packages && zip -r ../../dist/lambda.zip .
 
 tf-init:
-	cd $(TF_DIR) && terraform init
+	cd $(TF_DIR) && terraform init -backend-config=backend.hcl
 
 tf-plan:
 	cd $(TF_DIR) && terraform plan -var-file=terraform.tfvars
