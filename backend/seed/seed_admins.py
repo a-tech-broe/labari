@@ -13,8 +13,17 @@ import sys
 import urllib.error
 import urllib.request
 
-API_URL = os.environ["API_URL"].rstrip("/")
-PASSWORD = os.environ["ADMIN_PASSWORD"]
+API_URL = os.environ.get("API_URL", "").rstrip("/")
+PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+
+if not API_URL or not API_URL.startswith("http"):
+    print("Error: API_URL is not set or is not a valid URL.", file=sys.stderr)
+    print("Set the NEXT_PUBLIC_API_URL secret in GitHub, or the API_URL env var.", file=sys.stderr)
+    sys.exit(1)
+
+if not PASSWORD:
+    print("Error: ADMIN_PASSWORD secret is not set.", file=sys.stderr)
+    sys.exit(1)
 
 seed_file = os.path.join(os.path.dirname(__file__), "admins.json")
 with open(seed_file) as f:
