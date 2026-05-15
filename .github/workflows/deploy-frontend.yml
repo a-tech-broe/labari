@@ -43,7 +43,23 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: Check infrastructure exists
+        id: infra_check
+        run: |
+          BUCKET="${{ secrets.FRONTEND_BUCKET }}"
+          DIST_ID="${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}"
+          if [ -z "$BUCKET" ] || [ -z "$DIST_ID" ]; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "FRONTEND_BUCKET or CLOUDFRONT_DISTRIBUTION_ID secret is not set — run the Terraform workflow first."
+          elif aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "S3 bucket '$BUCKET' not found — run the Terraform workflow first to create it."
+          fi
+
       - name: Sync to S3
+        if: steps.infra_check.outputs.exists == 'true'
         run: |
           aws s3 sync out/ s3://${{ secrets.FRONTEND_BUCKET }}/ \
             --delete \
@@ -55,7 +71,13 @@ jobs:
             --include "*.html"
 
       - name: Invalidate CloudFront cache
+        if: steps.infra_check.outputs.exists == 'true'
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
             --paths "/*"
+
+      - name: Skip notice
+        if: steps.infra_check.outputs.exists == 'false'
+        run: |
+          echo "::warning::Frontend infrastructure does not exist yet. Run the Terraform workflow first, then re-run this workflow."
