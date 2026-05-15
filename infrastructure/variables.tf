@@ -14,7 +14,7 @@ variable "environment" {
 }
 
 variable "aws_region" {
-  description = "Primary AWS region for all resources except ACM (us-east-1)"
+  description = "Primary AWS region. ACM certs for CloudFront are always created in us-east-1 via a provider alias regardless of this value."
   type        = string
   default     = "us-east-1"
 }

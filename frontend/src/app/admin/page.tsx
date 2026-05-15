@@ -223,7 +223,7 @@ export default function AdminPage() {
   const [auth, setAuth] = useState<AuthState | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(false)
-  const [editing, setEditing] = useState<Post | null | 'new'>( null)
+  const [editing, setEditing] = useState<Post | null | 'new'>(null)
 
   useEffect(() => {
     setAuth(loadAuth())

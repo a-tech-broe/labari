@@ -16,8 +16,8 @@ terraform {
     }
   }
 
-  # Bucket and table names are supplied via backend.hcl (local) or
-  # -backend-config flags (CI) so they stay out of source control.
+  # Bucket and table names are supplied via backend.hcl.example → backend.hcl (local)
+  # or -backend-config flags (CI) so they stay out of source control.
   # Run: terraform init -backend-config=backend.hcl
   backend "s3" {
     key     = "infrastructure/terraform.tfstate"
