@@ -3,10 +3,10 @@ name: Terraform
 on:
   push:
     branches: [main]
-    paths: ['infrastructure/**']
+    paths: ['infrastructure/**', 'backend/**']
   pull_request:
     branches: [main]
-    paths: ['infrastructure/**']
+    paths: ['infrastructure/**', 'backend/**']
 
 permissions:
   contents: read
@@ -28,12 +28,9 @@ jobs:
         with:
           terraform_version: '1.9.x'
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/setup-python@v5
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          python-version: '3.12'
 
       - name: Check required secrets
         run: |
@@ -55,6 +52,25 @@ jobs:
           DOMAIN_NAME: ${{ secrets.DOMAIN_NAME }}
           ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
 
+      # Build the Lambda zip so Terraform can read it during plan.
+      # The backend deploy workflow also builds and deploys it, but Terraform
+      # needs the file to exist to create/update the aws_lambda_function resource.
+      - name: Build Lambda package
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p dist/packages
+          pip install -r backend/requirements.txt -t dist/packages/ --quiet
+          cp -r backend/handler.py backend/handlers backend/shared dist/packages/
+          cd dist/packages && zip -r ../../dist/lambda.zip . \
+            -x "**/__pycache__/*" -x "*.pyc" -x "*.dist-info/*"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Terraform Init
         run: |
           terraform init \
@@ -62,7 +78,7 @@ jobs:
             -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}" \
             -backend-config="region=${{ secrets.AWS_REGION }}"
 
-      - name: Terraform Format Check
+      - name: Terraform Format
         run: terraform fmt -recursive
 
       - name: Terraform Validate
@@ -75,8 +91,6 @@ jobs:
           TF_VAR_domain_name: ${{ secrets.DOMAIN_NAME }}
           TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
           TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
-          TF_VAR_environment: ${{ vars.ENVIRONMENT || 'prod' }}
-          TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'labari' }}
 
       - name: Comment plan on PR
         if: github.event_name == 'pull_request'
