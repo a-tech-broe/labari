@@ -13,7 +13,7 @@ function gradientFromTitle(title: string) {
 
 export default function PostCard({ post }: { post: Post }) {
   return (
-    <Link href={`/posts/${post.id}/`} className="group block">
+    <Link href={`/post?id=${post.id}`} className="group block">
       <article className="rounded-xl border border-dim bg-surface overflow-hidden hover:border-[#444] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/40">
         <div className="h-40 overflow-hidden">
           {post.cover_image ? (

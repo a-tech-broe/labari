@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -12,17 +13,20 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
-export default function PostPageClient({ slug }: { slug: string }) {
+export default function PostDetail() {
+  const searchParams = useSearchParams()
+  const id = searchParams.get('id')
   const [post, setPost] = useState<Post | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
   useEffect(() => {
-    getPost(slug)
+    if (!id) { setLoading(false); setNotFound(true); return }
+    getPost(id)
       .then(setPost)
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false))
-  }, [slug])
+  }, [id])
 
   if (loading) {
     return (
