@@ -12,6 +12,10 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
+export function generateStaticParams() {
+  return []
+}
+
 export default function PostPage({ params }: { params: { slug: string } }) {
   const [post, setPost] = useState<Post | null>(null)
   const [loading, setLoading] = useState(true)
