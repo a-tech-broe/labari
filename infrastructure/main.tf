@@ -35,7 +35,7 @@ module "cdn" {
   certificate_arn                      = module.dns.certificate_arn
   zone_id                              = module.dns.zone_id
   frontend_bucket_id                   = module.storage.frontend_bucket_id
-  frontend_bucket_regional_domain_name = "${module.storage.frontend_bucket_id}.s3.${var.aws_region}.amazonaws.com"
+  frontend_bucket_regional_domain_name = module.storage.frontend_bucket_regional_domain_name
 }
 
 module "api" {
