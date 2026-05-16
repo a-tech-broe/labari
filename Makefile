@@ -1,4 +1,5 @@
-.PHONY: build build-simple build-layer tf-init tf-plan tf-apply tf-destroy deploy-frontend dev-frontend test-backend
+.PHONY: build build-simple build-layer tf-init tf-plan tf-apply tf-destroy deploy-frontend dev-frontend test-backend \
+        docker-up docker-down docker-build ec2-init ec2-plan ec2-apply
 
 ENVIRONMENT  ?= prod
 TF_DIR        = infrastructure
@@ -68,3 +69,28 @@ deploy-backend: build-simple
 
 test-backend:
 	cd backend && python -m pytest tests/ -v
+
+# --- Docker (local dev) ---
+
+docker-up:
+	docker compose up --build -d
+
+docker-down:
+	docker compose down -v
+
+docker-build:
+	docker compose build
+
+# --- EC2 Terraform ---
+
+EC2_TF_DIR = infrastructure-ec2
+
+ec2-init:
+	cd $(EC2_TF_DIR) && terraform init -backend-config=../infrastructure/backend.hcl \
+		-backend-config="key=labari-ec2/terraform.tfstate"
+
+ec2-plan:
+	cd $(EC2_TF_DIR) && terraform plan
+
+ec2-apply:
+	cd $(EC2_TF_DIR) && terraform apply
