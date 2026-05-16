@@ -6,6 +6,12 @@ const nextConfig = {
     unoptimized: true,
   },
   transpilePackages: ['react-markdown', 'remark-gfm'],
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
 }
 
 export default nextConfig

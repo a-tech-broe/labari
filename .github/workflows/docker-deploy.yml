@@ -11,6 +11,12 @@ on:
       - 'ansible/**'
       - 'docker-compose.prod.yml'
       - '.github/workflows/docker-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy (default: latest)'
+        required: false
+        default: 'latest'
 
 permissions:
   contents: read
@@ -26,12 +32,13 @@ jobs:
     name: Detect changes
     runs-on: ubuntu-latest
     outputs:
-      infra:   ${{ steps.filter.outputs.infra }}
-      app:     ${{ steps.filter.outputs.app }}
+      infra:   ${{ github.event_name == 'workflow_dispatch' && 'false' || steps.filter.outputs.infra }}
+      app:     ${{ github.event_name == 'workflow_dispatch' && 'true'  || steps.filter.outputs.app }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
+        if: github.event_name != 'workflow_dispatch'
         with:
           filters: |
             infra:
@@ -130,11 +137,11 @@ jobs:
         if: always()
         run: rm -f "$KEY_FILE"
 
-  # ── 2. Build & push Docker images (only when app files changed) ─────────────
+  # ── 2. Build & push Docker images (only when app files changed, not on manual dispatch) ─────
   build:
     name: Build & Push Images
     needs: changes
-    if: needs.changes.outputs.app == 'true'
+    if: needs.changes.outputs.app == 'true' && github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
@@ -180,7 +187,7 @@ jobs:
       always() &&
       github.ref == 'refs/heads/main' &&
       needs.changes.outputs.app == 'true' &&
-      needs.build.result == 'success'
+      (needs.build.result == 'success' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: production
 
@@ -226,7 +233,7 @@ jobs:
             -i /tmp/inventory.ini \
             -e "dockerhub_username=${{ secrets.DOCKERHUB_USERNAME }}" \
             -e "dockerhub_token=${{ secrets.DOCKERHUB_TOKEN }}" \
-            -e "image_tag=${{ github.sha }}" \
+            -e "image_tag=${{ github.event_name == 'workflow_dispatch' && inputs.image_tag || github.sha }}" \
             -e "db_password=${{ secrets.DB_PASSWORD }}" \
             -e "jwt_secret=${{ secrets.JWT_SECRET }}" \
             -e "aws_region=${{ secrets.AWS_REGION }}" \
