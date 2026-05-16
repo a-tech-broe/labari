@@ -163,50 +163,79 @@ make test-backend
 - A Route 53 hosted zone for your domain
 - Docker Hub account with `labari-backend` and `labari-nginx` repos created
 
-#### 1. Provision infrastructure (once)
+#### CI/CD pipeline overview
 
-Push to the `dev` branch with changes inside `infrastructure-ec2/` to trigger the `provision` job automatically, **or** run manually:
+```
+dev push (infrastructure-ec2/** changed)
+  └── changes job (dorny/paths-filter)
+        └── provision job
+              ├── terraform apply   → EC2 + EIP association + Route 53
+              └── ansible provision.yml → Docker install + stack start
+
+any push (backend-fastapi/**, frontend/**, nginx/**)
+  └── build job
+        ├── docker build + push labari-backend → Docker Hub
+        └── docker build + push labari-nginx   → Docker Hub
+
+main push
+  └── build job → deploy job
+                    └── ansible deploy.yml → pull updated images + restart
+```
+
+#### 1. Provision infrastructure (first time only)
+
+Add all secrets listed below, then push any file change inside `infrastructure-ec2/` to the `dev` branch. The `changes` job detects the modified path and automatically triggers `terraform apply` followed by the Ansible provisioning playbook.
+
+To run manually instead:
 
 ```bash
 cp infrastructure-ec2/terraform.tfvars.example infrastructure-ec2/terraform.tfvars
-# Fill in aws_region, key_name, domain_name, hosted_zone_id, eip_allocation_id
+# Fill in: aws_region, key_name, domain_name, hosted_zone_id, eip_allocation_id
 
 make ec2-init
 make ec2-apply
 
 pip install ansible
 ansible-playbook ansible/provision.yml \
-  -i "<ec2-ip>, " \
+  -i "<ec2-ip>," \
   -u ubuntu --private-key ~/.ssh/labari.pem \
   -e "dockerhub_username=<user>" \
   -e "dockerhub_token=<token>" \
   -e "image_tag=latest" \
   -e "db_password=<pass>" \
-  -e "jwt_secret=<secret>"
+  -e "jwt_secret=<secret>" \
+  -e "aws_region=us-east-1" \
+  -e "images_bucket="
 ```
 
 #### 2. Deploy (every push to main)
 
-CI builds both Docker images, pushes them to Docker Hub, then Ansible pulls and restarts the stack on EC2. Nothing to run manually.
+CI builds both Docker images, pushes them to Docker Hub tagged with the commit SHA, then Ansible SSH-es into EC2 and runs `docker compose pull && up -d`. Nothing to run manually.
 
 #### GitHub Actions secrets
 
-| Secret | Value |
-| ------ | ----- |
-| `AWS_ACCESS_KEY_ID` | IAM access key |
-| `AWS_SECRET_ACCESS_KEY` | IAM secret |
-| `AWS_REGION` | e.g. `us-east-1` |
-| `TF_STATE_BUCKET` | S3 bucket for Terraform state |
-| `TF_LOCK_TABLE` | DynamoDB table for state locking |
-| `DOMAIN_NAME` | e.g. `mailabari.com` |
-| `HOSTED_ZONE_ID` | Route 53 hosted zone ID |
-| `EIP_ALLOCATION_ID` | `eipalloc-0123456789abcdef0` |
-| `EC2_KEY_NAME` | EC2 key pair name |
-| `EC2_SSH_PRIVATE_KEY` | Contents of the `.pem` key file |
-| `DOCKERHUB_USERNAME` | Docker Hub username |
-| `DOCKERHUB_TOKEN` | Docker Hub access token |
-| `DB_PASSWORD` | PostgreSQL password |
-| `JWT_SECRET` | Random string for JWT signing |
+| Secret | Required | Value |
+| ------ | -------- | ----- |
+| `AWS_ACCESS_KEY_ID` | ✅ | IAM access key |
+| `AWS_SECRET_ACCESS_KEY` | ✅ | IAM secret |
+| `AWS_REGION` | ✅ | e.g. `us-east-1` |
+| `TF_STATE_BUCKET` | ✅ | S3 bucket for Terraform state |
+| `TF_LOCK_TABLE` | ✅ | DynamoDB table for state locking |
+| `DOMAIN_NAME` | ✅ | e.g. `mailabari.com` |
+| `HOSTED_ZONE_ID` | ✅ | Route 53 hosted zone ID |
+| `EIP_ALLOCATION_ID` | ✅ | Allocation ID of an existing Elastic IP — find it with `aws ec2 describe-addresses` |
+| `EC2_KEY_NAME` | ✅ | EC2 key pair name |
+| `EC2_SSH_PRIVATE_KEY` | ✅ | Full contents of the `.pem` file |
+| `DOCKERHUB_USERNAME` | ✅ | Docker Hub username |
+| `DOCKERHUB_TOKEN` | ✅ | Docker Hub access token (Account Settings → Security) |
+| `DB_PASSWORD` | ✅ | Strong password for PostgreSQL |
+| `JWT_SECRET` | ✅ | Random string for JWT signing (e.g. `openssl rand -hex 32`) |
+| `IMAGES_BUCKET` | ➖ | S3 bucket name for image uploads — leave blank to disable |
+
+> **Tip:** Find your EIP allocation ID with:
+> ```bash
+> aws ec2 describe-addresses --query 'Addresses[*].[AllocationId,PublicIp]' --output table
+> ```
 
 ---
 

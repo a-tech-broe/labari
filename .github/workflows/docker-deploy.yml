@@ -21,13 +21,35 @@ env:
 
 jobs:
 
-  # ── 1. Provision EC2 (only on dev, only when infra changed) ─────────────────
+  # ── 0. Detect which paths changed ───────────────────────────────────────────
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      infra:   ${{ steps.filter.outputs.infra }}
+      app:     ${{ steps.filter.outputs.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            infra:
+              - 'infrastructure-ec2/**'
+            app:
+              - 'backend-fastapi/**'
+              - 'frontend/**'
+              - 'nginx/**'
+              - 'ansible/**'
+              - 'docker-compose.prod.yml'
+
+  # ── 1. Provision EC2 (only on dev when infra-ec2 files changed) ─────────────
   provision:
     name: Terraform + Ansible Provision
+    needs: changes
     if: |
       github.ref == 'refs/heads/dev' &&
-      (contains(github.event.head_commit.modified, 'infrastructure-ec2/') ||
-       contains(github.event.head_commit.added, 'infrastructure-ec2/'))
+      needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     environment: production
     outputs:
@@ -70,12 +92,20 @@ jobs:
 
       - name: Get EC2 IP
         id: tf_output
-        run: echo "public_ip=$(terraform output -raw public_ip)" >> "$GITHUB_OUTPUT"
+        run: |
+          IP=$(terraform output -raw public_ip)
+          if [ -z "$IP" ]; then
+            echo "::error::Terraform output 'public_ip' is empty — apply may have failed"
+            exit 1
+          fi
+          echo "public_ip=$IP" >> "$GITHUB_OUTPUT"
 
       - name: Write SSH key
         run: |
-          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > /tmp/labari.pem
-          chmod 600 /tmp/labari.pem
+          KEY_FILE=$(mktemp)
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          echo "KEY_FILE=$KEY_FILE" >> "$GITHUB_ENV"
 
       - name: Run Ansible provision playbook
         working-directory: ${{ github.workspace }}
@@ -83,7 +113,7 @@ jobs:
           pip install ansible --quiet
           cat > /tmp/inventory.ini <<EOF
           [labari]
-          ${{ steps.tf_output.outputs.public_ip }} ansible_user=ubuntu ansible_ssh_private_key_file=/tmp/labari.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+          ${{ steps.tf_output.outputs.public_ip }} ansible_user=ubuntu ansible_ssh_private_key_file=$KEY_FILE ansible_ssh_common_args='-o StrictHostKeyChecking=no'
           EOF
           ansible-playbook ansible/provision.yml \
             -i /tmp/inventory.ini \
@@ -93,7 +123,7 @@ jobs:
             -e "db_password=${{ secrets.DB_PASSWORD }}" \
             -e "jwt_secret=${{ secrets.JWT_SECRET }}" \
             -e "aws_region=${{ secrets.AWS_REGION }}" \
-            -e "images_bucket=${{ secrets.IMAGES_BUCKET || '' }}"
+            -e "images_bucket=${{ secrets.IMAGES_BUCKET }}"
 
   # ── 2. Build & push Docker images (on any matching push) ────────────────────
   build:
@@ -169,15 +199,17 @@ jobs:
 
       - name: Write SSH key
         run: |
-          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > /tmp/labari.pem
-          chmod 600 /tmp/labari.pem
+          KEY_FILE=$(mktemp)
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          echo "KEY_FILE=$KEY_FILE" >> "$GITHUB_ENV"
 
       - name: Run Ansible deploy playbook
         run: |
           pip install ansible --quiet
           cat > /tmp/inventory.ini <<EOF
           [labari]
-          ${{ steps.ec2_ip.outputs.ip }} ansible_user=ubuntu ansible_ssh_private_key_file=/tmp/labari.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+          ${{ steps.ec2_ip.outputs.ip }} ansible_user=ubuntu ansible_ssh_private_key_file=$KEY_FILE ansible_ssh_common_args='-o StrictHostKeyChecking=no'
           EOF
           ansible-playbook ansible/deploy.yml \
             -i /tmp/inventory.ini \
@@ -187,4 +219,4 @@ jobs:
             -e "db_password=${{ secrets.DB_PASSWORD }}" \
             -e "jwt_secret=${{ secrets.JWT_SECRET }}" \
             -e "aws_region=${{ secrets.AWS_REGION }}" \
-            -e "images_bucket=${{ secrets.IMAGES_BUCKET || '' }}"
+            -e "images_bucket=${{ secrets.IMAGES_BUCKET }}"

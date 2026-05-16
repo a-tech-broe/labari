@@ -13,6 +13,10 @@ provider "aws" {
   region = var.aws_region
 }
 
+data "aws_vpc" "default" {
+  default = true
+}
+
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"] # Canonical
@@ -31,6 +35,7 @@ data "aws_ami" "ubuntu" {
 resource "aws_security_group" "labari" {
   name        = "labari-ec2"
   description = "Labari application security group"
+  vpc_id      = data.aws_vpc.default.id
 
   ingress {
     description = "HTTP"
