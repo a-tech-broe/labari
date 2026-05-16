@@ -22,9 +22,10 @@ A portfolio project demonstrating end-to-end DevOps ownership: containerised app
                         Users
                           │
                      DNS (Route 53)
-                          │
-                    Elastic IP (static)
-                          │
+                          │  ALIAS record
+                    ALB  (HTTPS :443 / HTTP :80→redirect)
+                     ACM certificate (DNS-validated)
+                          │  HTTP :80
                     EC2  m5.xlarge
               ┌─── nginx :80 ──────────────────┐
               │                                 │
@@ -43,7 +44,7 @@ A portfolio project demonstrating end-to-end DevOps ownership: containerised app
               └─────────────────────────────────┘
 ```
 
-All three services run as Docker containers managed by Compose. nginx handles static file serving, reverse proxying, security headers, and request size limits. The backend runs as a non-root user and applies Alembic migrations before startup.
+HTTPS is terminated at the ALB using an ACM certificate (DNS-validated via Route 53). HTTP traffic is permanently redirected to HTTPS at the ALB listener. All three Docker services run on the EC2 instance managed by Compose. The EC2 security group allows port 80 only from the ALB — direct access is blocked. The Elastic IP is kept for SSH.
 
 ---
 
@@ -54,6 +55,8 @@ All three services run as Docker containers managed by Compose. nginx handles st
 | IaC | Terraform ≥ 1.9 |
 | Config management | Ansible |
 | Compute | EC2 m5.xlarge (Ubuntu 22.04) |
+| Load balancer | ALB (HTTPS termination, HTTP→HTTPS redirect) |
+| TLS | ACM certificate (DNS-validated) |
 | Backend | FastAPI + SQLAlchemy + Uvicorn |
 | Migrations | Alembic (runs on container startup) |
 | Database | PostgreSQL 16 |
@@ -62,7 +65,7 @@ All three services run as Docker containers managed by Compose. nginx handles st
 | Containers | Docker + Docker Compose |
 | Registry | Docker Hub |
 | Auth | JWT HS256 |
-| DNS | Route 53 (A record → Elastic IP) |
+| DNS | Route 53 (ALIAS → ALB) |
 | CI/CD | GitHub Actions |
 
 ---
@@ -185,10 +188,12 @@ If you need to redeploy without a code change (e.g., after first provisioning), 
 
 - AWS account + CLI configured
 - Terraform ≥ 1.9
-- An existing Elastic IP in your AWS account
+- An existing Elastic IP in your AWS account (used for SSH; web traffic goes through ALB)
 - A Route 53 hosted zone for your domain
 - An EC2 key pair
 - Docker Hub account with two repos: `labari-backend` and `labari-nginx`
+
+Terraform provisions the ACM certificate and ALB automatically. DNS validation runs during `terraform apply` — it typically completes within 1–2 minutes.
 
 ### First-time provisioning
 
@@ -249,15 +254,18 @@ To redeploy without a code change, use the manual workflow dispatch described in
 
 | Control | Implementation |
 | ------- | -------------- |
+| TLS | ACM certificate on ALB; HTTP permanently redirected to HTTPS (301) |
+| HSTS | `Strict-Transport-Security max-age=31536000` via nginx, effective over HTTPS |
+| EC2 exposure | Port 80 open only to ALB security group — no direct internet access |
 | JWT secret validation | App fails at startup if `JWT_SECRET` is not overridden from the default |
-| CORS | Locked to `DOMAIN_NAME` in production; localhost in dev |
-| Security headers | `X-Frame-Options`, `X-Content-Type-Options`, `HSTS`, `Referrer-Policy`, `Permissions-Policy` via nginx |
+| CORS | Locked to `https://DOMAIN_NAME` in production; localhost in dev |
+| Security headers | `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` via nginx |
 | Request size | `client_max_body_size 10M` in nginx |
 | Container user | Backend runs as non-root `appuser` |
 | Atomic counters | Like increment uses `UPDATE … RETURNING` — no read-modify-write race |
 | Schema migrations | Alembic — versioned, rollback-capable, runs before server starts |
 | Connection pool | `pool_size=10`, `max_overflow=20`, `pool_recycle=1800s` |
-| Health check | `/health` probes the database; returns `503` if DB is unreachable |
+| Health check | ALB target group checks `/health`; backend probes DB and returns `503` if unreachable |
 | SSH key hygiene | Written to `mktemp`, deleted with `if: always()` after Ansible run |
 | Docs | Swagger UI disabled in production (`ENVIRONMENT=production`) |
 
