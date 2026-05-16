@@ -1,4 +1,4 @@
-.PHONY: docker-up docker-down docker-build dev-frontend ec2-init ec2-plan ec2-apply
+.PHONY: docker-up docker-down docker-build dev-frontend ec2-init ec2-plan ec2-apply teardown
 
 EC2_TF_DIR = infrastructure-ec2
 
@@ -29,3 +29,8 @@ ec2-plan:
 
 ec2-apply:
 	cd $(EC2_TF_DIR) && terraform apply
+
+# --- Teardown (destroy all AWS resources) ---
+
+teardown:
+	bash scripts/teardown.sh
