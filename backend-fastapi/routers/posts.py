@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, update
 from sqlalchemy.orm import Session
 from ulid import ULID
 
@@ -61,20 +61,29 @@ def _fmt(post: Post) -> dict:
 @router.get("")
 def list_posts(
     category: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Post).filter(Post.published == True).order_by(Post.published_at.desc())
+    q = db.query(Post).filter(Post.published.is_(True)).order_by(Post.published_at.desc())
     if category:
         q = q.filter(Post.categories.any(func.lower(category)))
-    return {"posts": [_fmt(p) for p in q.all()]}
+    total = q.count()
+    posts = q.offset(offset).limit(limit).all()
+    return {"posts": [_fmt(p) for p in posts], "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/search")
-def search_posts(q: str = Query(..., min_length=2), db: Session = Depends(get_db)):
+def search_posts(
+    q: str = Query(..., min_length=2, max_length=100),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
     term = f"%{q.lower()}%"
-    posts = (
+    query = (
         db.query(Post)
-        .filter(Post.published == True)
+        .filter(Post.published.is_(True))
         .filter(
             or_(
                 func.lower(Post.title).like(term),
@@ -83,9 +92,10 @@ def search_posts(q: str = Query(..., min_length=2), db: Session = Depends(get_db
             )
         )
         .order_by(Post.published_at.desc())
-        .all()
     )
-    return {"posts": [_fmt(p) for p in posts], "query": q}
+    total = query.count()
+    posts = query.offset(offset).limit(limit).all()
+    return {"posts": [_fmt(p) for p in posts], "query": q, "total": total}
 
 
 @router.get("/{id}")
@@ -150,12 +160,17 @@ def update_post(id: str, body: PostUpdate, db: Session = Depends(get_db), user=D
 
 @router.post("/{id}/like")
 def like_post(id: str, db: Session = Depends(get_db)):
-    post = db.query(Post).filter(Post.id == id).first()
-    if not post:
+    result = db.execute(
+        update(Post)
+        .where(Post.id == id)
+        .values(like_count=Post.like_count + 1)
+        .returning(Post.like_count)
+    )
+    row = result.fetchone()
+    if not row:
         raise HTTPException(404, "Post not found")
-    post.like_count = (post.like_count or 0) + 1
     db.commit()
-    return {"like_count": post.like_count}
+    return {"like_count": row[0]}
 
 
 @router.delete("/{id}", status_code=200)

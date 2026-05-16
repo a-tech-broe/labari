@@ -123,11 +123,18 @@ jobs:
             -e "db_password=${{ secrets.DB_PASSWORD }}" \
             -e "jwt_secret=${{ secrets.JWT_SECRET }}" \
             -e "aws_region=${{ secrets.AWS_REGION }}" \
+            -e "domain_name=${{ secrets.DOMAIN_NAME }}" \
             -e "images_bucket=${{ secrets.IMAGES_BUCKET }}"
 
-  # ── 2. Build & push Docker images (on any matching push) ────────────────────
+      - name: Clean up SSH key
+        if: always()
+        run: rm -f "$KEY_FILE"
+
+  # ── 2. Build & push Docker images (only when app files changed) ─────────────
   build:
     name: Build & Push Images
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -165,11 +172,15 @@ jobs:
           cache-from: type=gha
           cache-to:   type=gha,mode=max
 
-  # ── 3. Deploy to EC2 (only on main, after build) ────────────────────────────
+  # ── 3. Deploy to EC2 (only on main, after build succeeds) ───────────────────
   deploy:
     name: Deploy to EC2
-    needs: build
-    if: github.ref == 'refs/heads/main'
+    needs: [changes, build]
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      needs.changes.outputs.app == 'true' &&
+      needs.build.result == 'success'
     runs-on: ubuntu-latest
     environment: production
 
@@ -219,4 +230,9 @@ jobs:
             -e "db_password=${{ secrets.DB_PASSWORD }}" \
             -e "jwt_secret=${{ secrets.JWT_SECRET }}" \
             -e "aws_region=${{ secrets.AWS_REGION }}" \
+            -e "domain_name=${{ secrets.DOMAIN_NAME }}" \
             -e "images_bucket=${{ secrets.IMAGES_BUCKET }}"
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -f "$KEY_FILE"

@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Boolean, Column, DateTime, ForeignKey, Index,
+    Integer, String, Text,
+)
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -28,6 +31,10 @@ class User(Base):
 
 class Post(Base):
     __tablename__ = "posts"
+    __table_args__ = (
+        Index("ix_posts_title", "title"),
+        Index("ix_posts_published_at", "published_at"),
+    )
 
     id = Column(String, primary_key=True)
     title = Column(String, nullable=False)
@@ -37,11 +44,11 @@ class Post(Base):
     cover_image = Column(String, default="")
     categories = Column(ARRAY(String), default=list)
     author_id = Column(String, ForeignKey("users.id"), nullable=False)
-    published = Column(Boolean, default=False)
+    published = Column(Boolean, default=False, nullable=False)
     published_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_now)
     updated_at = Column(DateTime(timezone=True), default=_now, onupdate=_now)
-    like_count = Column(Integer, default=0)
+    like_count = Column(Integer, default=0, nullable=False)
 
     author = relationship("User", back_populates="posts")
     comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
@@ -49,6 +56,9 @@ class Post(Base):
 
 class Comment(Base):
     __tablename__ = "comments"
+    __table_args__ = (
+        Index("ix_comments_post_id", "post_id"),
+    )
 
     id = Column(String, primary_key=True)
     post_id = Column(String, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)

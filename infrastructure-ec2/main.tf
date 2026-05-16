@@ -87,6 +87,7 @@ resource "aws_instance" "labari" {
 
   user_data = <<-EOF
     #!/bin/bash
+    set -e
     apt-get update -y
     apt-get install -y curl
   EOF
