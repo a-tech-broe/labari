@@ -145,6 +145,22 @@ def update_post(event, context):
     return success_response({"message": "Post updated"})
 
 
+def like_post(event, context):
+    post_id = (event.get("pathParameters") or {}).get("id", "")
+    table = get_table()
+    try:
+        result = table.update_item(
+            Key={"PK": f"POST#{post_id}", "SK": f"POST#{post_id}"},
+            UpdateExpression="ADD like_count :inc",
+            ConditionExpression="attribute_exists(PK)",
+            ExpressionAttributeValues={":inc": 1},
+            ReturnValues="UPDATED_NEW",
+        )
+        return success_response({"like_count": int(result["Attributes"].get("like_count", 0))})
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        return error_response(404, "Post not found")
+
+
 def delete_post(event, context):
     post_id = (event.get("pathParameters") or {}).get("id", "")
     table = get_table()
@@ -184,4 +200,5 @@ def _format_post(item):
         "published_at": item.get("published_at"),
         "created_at": item.get("created_at"),
         "updated_at": item.get("updated_at"),
+        "like_count": int(item.get("like_count", 0)),
     }

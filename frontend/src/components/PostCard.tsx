@@ -37,7 +37,14 @@ export default function PostCard({ post }: { post: Post }) {
           </h2>
           <p className="text-sm text-muted line-clamp-2 mb-3">{post.excerpt}</p>
           <div className="flex items-center justify-between gap-2">
-            <time className="text-xs text-muted">{formatDate(post.published_at)}</time>
+            <div className="flex items-center gap-3">
+              <time className="text-xs text-muted">{formatDate(post.published_at)}</time>
+              {post.like_count > 0 && (
+                <span className="text-xs text-muted flex items-center gap-1">
+                  <span>❤️</span>{post.like_count}
+                </span>
+              )}
+            </div>
             {post.categories?.length > 0 && (
               <div className="flex gap-1 flex-wrap justify-end">
                 {post.categories.slice(0, 3).map(cat => (

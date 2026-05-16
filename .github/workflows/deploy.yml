@@ -225,18 +225,33 @@ jobs:
           aws lambda wait function-updated \
             --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }}
 
+      - name: Resolve API URL
+        if: steps.lambda_check.outputs.exists == 'true'
+        id: api_url
+        run: |
+          URL="${{ secrets.NEXT_PUBLIC_API_URL }}"
+          if [ -z "$URL" ]; then
+            URL=$(aws apigatewayv2 get-apis \
+              --query "Items[?Name=='labari-prod'].ApiEndpoint" \
+              --output text)
+            echo "Derived API URL: $URL"
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
       - name: Seed admin accounts
         if: steps.lambda_check.outputs.exists == 'true'
         run: |
-          API_URL="${{ secrets.NEXT_PUBLIC_API_URL }}"
-          if [ -z "$API_URL" ]; then
-            API_URL=$(aws apigatewayv2 get-apis \
-              --query "Items[?Name=='labari-prod'].ApiEndpoint" \
-              --output text)
-            echo "Derived API URL: $API_URL"
-          fi
-          API_URL="$API_URL" ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" \
+          API_URL="${{ steps.api_url.outputs.url }}" \
+          ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" \
             python backend/seed/seed_admins.py
+
+      - name: Seed sample stories
+        if: steps.lambda_check.outputs.exists == 'true'
+        run: |
+          API_URL="${{ steps.api_url.outputs.url }}" \
+          ADMIN_EMAIL=$(python -c "import json; print(json.load(open('backend/seed/admins.json'))[0]['email'])") \
+          ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" \
+            python backend/seed/seed_stories.py
 
       - name: Skip notice
         if: steps.lambda_check.outputs.exists == 'false'
