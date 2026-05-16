@@ -35,3 +35,9 @@ variable "environment" {
   type        = string
   default     = "production"
 }
+
+variable "alb_ssl_policy" {
+  description = "ALB HTTPS listener SSL policy"
+  type        = string
+  default     = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+}
