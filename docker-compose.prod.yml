@@ -28,25 +28,24 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 60s
 
   nginx:
     image: ${DOCKERHUB_USERNAME}/labari-nginx:${IMAGE_TAG:-latest}
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     ports:
       - "80:80"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost/health"]
-      interval: 10s
+      interval: 15s
       timeout: 5s
-      retries: 3
+      retries: 5
 
 volumes:
   pg_data:
