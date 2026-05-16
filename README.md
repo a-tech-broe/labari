@@ -152,7 +152,7 @@ The `docker-compose.yml` dev stack uses a built-in `JWT_SECRET` so you don't nee
 
 A `changes` job runs first on every push to detect which paths changed. Subsequent jobs only run when relevant paths are affected.
 
-```
+```text
 push to dev  (infrastructure-ec2/** changed)
   └── changes → provision
                   ├── terraform apply        EC2 + EIP association + Route 53
@@ -173,7 +173,7 @@ workflow_dispatch on main  (manual re-deploy, no code change needed)
 
 SSH keys are written to a unique temp file (`mktemp`) and deleted with `if: always()` after each Ansible run.
 
-#### Manual re-deploy
+### Manual re-deploy
 
 If you need to redeploy without a code change (e.g., after first provisioning), go to **GitHub → Actions → Docker Deploy → Run workflow**, select `main`, and leave the image tag as `latest`. The deploy job runs immediately without rebuilding images.
 
