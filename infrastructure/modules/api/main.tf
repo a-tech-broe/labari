@@ -10,16 +10,20 @@ locals {
   lambda_zip_hash = can(filebase64sha256(local.full_zip)) ? filebase64sha256(local.full_zip) : data.archive_file.lambda_source.output_base64sha256
 
   routes = {
-    "GET /posts"           = {}
-    "GET /posts/{id}"      = {}
-    "GET /search"          = {}
-    "POST /posts"          = {}
-    "PUT /posts/{id}"      = {}
-    "DELETE /posts/{id}"   = {}
-    "POST /auth/register"  = {}
-    "POST /auth/login"     = {}
-    "POST /images/upload"  = {}
-    "OPTIONS /{proxy+}"    = {}
+    "GET /posts"                                   = {}
+    "GET /posts/{id}"                              = {}
+    "GET /search"                                  = {}
+    "POST /posts"                                  = {}
+    "PUT /posts/{id}"                              = {}
+    "DELETE /posts/{id}"                           = {}
+    "POST /posts/{id}/like"                        = {}
+    "GET /posts/{id}/comments"                     = {}
+    "POST /posts/{id}/comments"                    = {}
+    "DELETE /posts/{id}/comments/{comment_id}"     = {}
+    "POST /auth/register"                          = {}
+    "POST /auth/login"                             = {}
+    "POST /images/upload"                          = {}
+    "OPTIONS /{proxy+}"                            = {}
   }
 }
 

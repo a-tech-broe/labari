@@ -11,6 +11,14 @@ export interface Post {
   published_at: string | null
   created_at: string
   updated_at: string
+  like_count: number
+}
+
+export interface Comment {
+  id: string
+  author_name: string
+  content: string
+  created_at: string
 }
 
 export interface User {

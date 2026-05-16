@@ -1,4 +1,4 @@
-import type { Post, User } from './types'
+import type { Comment, Post, User } from './types'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || ''
 
@@ -76,6 +76,25 @@ export async function register(
   return request('/auth/register', {
     method: 'POST',
     body: JSON.stringify({ email, password, name }),
+  })
+}
+
+export async function likePost(id: string): Promise<{ like_count: number }> {
+  return request<{ like_count: number }>(`/posts/${id}/like`, { method: 'POST' })
+}
+
+export async function getComments(postId: string): Promise<Comment[]> {
+  const data = await request<{ comments: Comment[] }>(`/posts/${postId}/comments`)
+  return data.comments
+}
+
+export async function createComment(
+  postId: string,
+  body: { author_name: string; content: string },
+): Promise<Comment> {
+  return request<Comment>(`/posts/${postId}/comments`, {
+    method: 'POST',
+    body: JSON.stringify(body),
   })
 }
 
