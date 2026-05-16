@@ -4,7 +4,6 @@
 *.tfstate.*
 *.tfvars
 *.tfvars.json
-infrastructure/backend.hcl
 .terraform.tfstate.lock.info
 .terraform.lock.hcl
 *.tfplan
@@ -16,9 +15,6 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
-
-# Build artifacts
-dist/
 
 # Python
 __pycache__/
