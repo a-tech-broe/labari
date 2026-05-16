@@ -13,6 +13,10 @@ provider "aws" {
   region = var.aws_region
 }
 
+data "aws_vpc" "default" {
+  default = true
+}
+
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"] # Canonical
@@ -31,6 +35,7 @@ data "aws_ami" "ubuntu" {
 resource "aws_security_group" "labari" {
   name        = "labari-ec2"
   description = "Labari application security group"
+  vpc_id      = data.aws_vpc.default.id
 
   ingress {
     description = "HTTP"
@@ -93,13 +98,13 @@ resource "aws_instance" "labari" {
   }
 }
 
-resource "aws_eip" "labari" {
-  instance = aws_instance.labari.id
-  domain   = "vpc"
+data "aws_eip" "labari" {
+  id = var.eip_allocation_id
+}
 
-  tags = {
-    Name = "labari-prod"
-  }
+resource "aws_eip_association" "labari" {
+  instance_id   = aws_instance.labari.id
+  allocation_id = data.aws_eip.labari.id
 }
 
 resource "aws_route53_record" "labari" {
@@ -107,7 +112,7 @@ resource "aws_route53_record" "labari" {
   name    = var.domain_name
   type    = "A"
   ttl     = 60
-  records = [aws_eip.labari.public_ip]
+  records = [data.aws_eip.labari.public_ip]
 }
 
 resource "aws_route53_record" "labari_www" {
@@ -115,5 +120,5 @@ resource "aws_route53_record" "labari_www" {
   name    = "www.${var.domain_name}"
   type    = "A"
   ttl     = 60
-  records = [aws_eip.labari.public_ip]
+  records = [data.aws_eip.labari.public_ip]
 }

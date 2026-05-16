@@ -15,16 +15,16 @@
         owner: ubuntu
         group: ubuntu
 
-    - name: Login to GHCR
+    - name: Login to Docker Hub
       shell: >
-        echo "{{ ghcr_token }}" |
-        docker login ghcr.io -u "{{ ghcr_user }}" --password-stdin
+        echo "{{ dockerhub_token }}" |
+        docker login -u "{{ dockerhub_username }}" --password-stdin
       no_log: true
 
     - name: Pull updated images
       shell: docker compose -f {{ compose_dir }}/docker-compose.yml pull
       environment:
-        GITHUB_REPOSITORY: "{{ github_repository }}"
+        DOCKERHUB_USERNAME: "{{ dockerhub_username }}"
         IMAGE_TAG: "{{ image_tag }}"
         DB_PASSWORD: "{{ db_password }}"
         JWT_SECRET: "{{ jwt_secret }}"
@@ -34,7 +34,7 @@
     - name: Restart application stack
       shell: docker compose -f {{ compose_dir }}/docker-compose.yml up -d --remove-orphans
       environment:
-        GITHUB_REPOSITORY: "{{ github_repository }}"
+        DOCKERHUB_USERNAME: "{{ dockerhub_username }}"
         IMAGE_TAG: "{{ image_tag }}"
         DB_PASSWORD: "{{ db_password }}"
         JWT_SECRET: "{{ jwt_secret }}"
