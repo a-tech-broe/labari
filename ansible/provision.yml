@@ -1,0 +1,109 @@
+---
+- name: Provision Labari EC2 instance
+  hosts: labari
+  become: true
+  gather_facts: true
+
+  vars:
+    compose_dir: /opt/labari
+
+  tasks:
+    - name: Wait for SSH to be available
+      wait_for_connection:
+        timeout: 300
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install prerequisites
+      apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - python3-pip
+        state: present
+
+    - name: Add Docker GPG key
+      shell: |
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+          -o /etc/apt/keyrings/docker.asc
+        chmod a+r /etc/apt/keyrings/docker.asc
+      args:
+        creates: /etc/apt/keyrings/docker.asc
+
+    - name: Add Docker apt repository
+      shell: |
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+          https://download.docker.com/linux/ubuntu \
+          $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+          > /etc/apt/sources.list.d/docker.list
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
+
+    - name: Install Docker and Compose plugin
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        update_cache: yes
+        state: present
+
+    - name: Enable and start Docker
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Add ubuntu user to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Create application directory
+      file:
+        path: "{{ compose_dir }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: "0755"
+
+    - name: Copy docker-compose.prod.yml
+      copy:
+        src: ../docker-compose.prod.yml
+        dest: "{{ compose_dir }}/docker-compose.yml"
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Login to GHCR
+      shell: >
+        echo "{{ ghcr_token }}" |
+        docker login ghcr.io -u "{{ ghcr_user }}" --password-stdin
+      no_log: true
+
+    - name: Pull latest images
+      shell: docker compose -f {{ compose_dir }}/docker-compose.yml pull
+      environment:
+        GITHUB_REPOSITORY: "{{ github_repository }}"
+        IMAGE_TAG: "{{ image_tag }}"
+        DB_PASSWORD: "{{ db_password }}"
+        JWT_SECRET: "{{ jwt_secret }}"
+        AWS_REGION: "{{ aws_region | default('us-east-1') }}"
+        IMAGES_BUCKET: "{{ images_bucket | default('') }}"
+
+    - name: Start application stack
+      shell: docker compose -f {{ compose_dir }}/docker-compose.yml up -d --remove-orphans
+      environment:
+        GITHUB_REPOSITORY: "{{ github_repository }}"
+        IMAGE_TAG: "{{ image_tag }}"
+        DB_PASSWORD: "{{ db_password }}"
+        JWT_SECRET: "{{ jwt_secret }}"
+        AWS_REGION: "{{ aws_region | default('us-east-1') }}"
+        IMAGES_BUCKET: "{{ images_bucket | default('') }}"
