@@ -8,10 +8,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...options,
   })
 
-  const data = await res.json()
+  let data: unknown
+  const ct = res.headers.get('content-type') ?? ''
+  if (ct.includes('application/json')) {
+    data = await res.json()
+  } else {
+    await res.text()
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`)
+    return undefined as unknown as T
+  }
 
   if (!res.ok) {
-    throw new Error(data.error || `Request failed: ${res.status}`)
+    throw new Error((data as Record<string, string>).error || `Request failed: ${res.status}`)
   }
 
   return data as T
