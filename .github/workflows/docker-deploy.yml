@@ -17,6 +17,11 @@ on:
         description: 'Image tag to deploy (default: latest)'
         required: false
         default: 'latest'
+      run_provision:
+        description: 'Run Terraform + Ansible provision (main branch only triggers deploy; dev triggers provision)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -32,8 +37,8 @@ jobs:
     name: Detect changes
     runs-on: ubuntu-latest
     outputs:
-      infra:   ${{ github.event_name == 'workflow_dispatch' && 'false' || steps.filter.outputs.infra }}
-      app:     ${{ github.event_name == 'workflow_dispatch' && 'true'  || steps.filter.outputs.app }}
+      infra:   ${{ (github.event_name == 'workflow_dispatch' && inputs.run_provision == 'true') && 'true' || steps.filter.outputs.infra }}
+      app:     ${{ (github.event_name == 'workflow_dispatch' && inputs.run_provision != 'true') && 'true' || steps.filter.outputs.app }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
