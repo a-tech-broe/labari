@@ -29,6 +29,7 @@
         DB_PASSWORD: "{{ db_password }}"
         JWT_SECRET: "{{ jwt_secret }}"
         AWS_REGION: "{{ aws_region | default('us-east-1') }}"
+        DOMAIN_NAME: "{{ domain_name | default('') }}"
         IMAGES_BUCKET: "{{ images_bucket | default('') }}"
 
     - name: Restart application stack
@@ -39,6 +40,7 @@
         DB_PASSWORD: "{{ db_password }}"
         JWT_SECRET: "{{ jwt_secret }}"
         AWS_REGION: "{{ aws_region | default('us-east-1') }}"
+        DOMAIN_NAME: "{{ domain_name | default('') }}"
         IMAGES_BUCKET: "{{ images_bucket | default('') }}"
 
     - name: Verify stack is healthy

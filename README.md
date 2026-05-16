@@ -2,25 +2,17 @@
 
 > **Labari** (Hausa: *stories / news*) — a production-grade blog platform built on AWS
 
-A portfolio project demonstrating end-to-end DevOps ownership: containerised application deployment, Infrastructure as Code, CI/CD pipelines, and configuration management on EC2.
+A portfolio project demonstrating end-to-end DevOps ownership: containerised application deployment, Infrastructure as Code, CI/CD pipelines, database migrations, and security hardening on EC2.
 
 ---
 
 ## Features
 
-**Public**
-
 - Blog listing with live search and category filters
-- Full post detail page with Markdown rendering
-- Like and comment on stories
-- Responsive dark-mode UI (Next.js + Tailwind CSS)
-
-**Admin**
-
-- Secure login with JWT authentication
-- Create, edit, and delete posts with draft / publish toggle
-- Direct-to-S3 image upload via presigned URLs
-- Category tagging
+- Full post detail with Markdown rendering, likes, and comments
+- Responsive dark-mode UI (Next.js 14 + Tailwind CSS)
+- Admin dashboard — create, edit, publish posts with image uploads
+- JWT authentication
 
 ---
 
@@ -41,16 +33,17 @@ A portfolio project demonstrating end-to-end DevOps ownership: containerised app
               │  /auth/       → FastAPI :8000   │
               │  /search      → FastAPI :8000   │
               │  /images/     → FastAPI :8000   │
+              │  /health      → FastAPI :8000   │
               │                                 │
-              │         FastAPI + Uvicorn        │
-              │              :8000               │
-              │                │                 │
-              │                ▼                 │
-              │          PostgreSQL 16           │
+              │      FastAPI + Uvicorn (x2)     │
+              │              :8000              │
+              │                │                │
+              │                ▼                │
+              │         PostgreSQL 16           │
               └─────────────────────────────────┘
 ```
 
-All three services run as Docker containers managed by Docker Compose. nginx handles TLS termination, static file serving, and reverse proxying to the FastAPI backend.
+All three services run as Docker containers managed by Compose. nginx handles static file serving, reverse proxying, security headers, and request size limits. The backend runs as a non-root user and applies Alembic migrations before startup.
 
 ---
 
@@ -62,9 +55,10 @@ All three services run as Docker containers managed by Docker Compose. nginx han
 | Config management | Ansible |
 | Compute | EC2 m5.xlarge (Ubuntu 22.04) |
 | Backend | FastAPI + SQLAlchemy + Uvicorn |
+| Migrations | Alembic (runs on container startup) |
 | Database | PostgreSQL 16 |
 | Frontend | Next.js 14 static export |
-| Web server | nginx (reverse proxy + static files) |
+| Web server | nginx (security headers, reverse proxy, static files) |
 | Containers | Docker + Docker Compose |
 | Registry | Docker Hub |
 | Auth | JWT HS256 |
@@ -77,24 +71,31 @@ All three services run as Docker containers managed by Docker Compose. nginx han
 
 ```text
 labari/
-├── backend-fastapi/              # FastAPI application
-│   ├── main.py                   # App entry point — CORS, DB init, router wiring
+├── backend-fastapi/
+│   ├── main.py                   # CORS (env-scoped), health check with DB probe
+│   ├── entrypoint.sh             # Runs migrations then starts uvicorn
 │   ├── core/
-│   │   ├── config.py             # pydantic-settings (reads .env)
+│   │   ├── config.py             # pydantic-settings — JWT_SECRET validated at startup
 │   │   └── auth.py               # JWT create/decode, get_current_user dependency
 │   ├── db/
-│   │   ├── models.py             # SQLAlchemy ORM: User, Post, Comment
-│   │   └── session.py            # Engine + get_db dependency
+│   │   ├── models.py             # SQLAlchemy ORM: User, Post, Comment (with indexes)
+│   │   └── session.py            # Connection pool (size=10, overflow=20, recycle=1800s)
 │   ├── routers/
 │   │   ├── auth.py               # POST /auth/register, /auth/login
-│   │   ├── posts.py              # CRUD + search + like
+│   │   ├── posts.py              # CRUD, paginated search, atomic like increment
 │   │   ├── comments.py           # List / create / delete comments
 │   │   └── images.py             # S3 presigned URL
-│   └── Dockerfile
+│   ├── alembic/                  # Versioned schema migrations
+│   │   ├── env.py
+│   │   └── versions/
+│   │       └── 0001_initial_schema.py
+│   ├── alembic.ini
+│   ├── Dockerfile                # Non-root appuser, entrypoint.sh
+│   └── .env.example
 │
 ├── nginx/
 │   ├── Dockerfile                # Multi-stage: npm build → nginx:alpine
-│   └── nginx.conf                # Static files + proxy_pass to backend:8000
+│   └── nginx.conf                # Security headers, 10 MB body limit, cache rules
 │
 ├── infrastructure-ec2/
 │   ├── main.tf                   # EC2, security group, EIP association, Route 53
@@ -111,8 +112,8 @@ labari/
 │       ├── components/           # PostCard, LikeButton, CommentSection
 │       └── lib/                  # API client, TypeScript types
 │
-├── docker-compose.yml            # Local dev (postgres, backend, nginx on :3000)
-├── docker-compose.prod.yml       # Production (Docker Hub images)
+├── docker-compose.yml            # Local dev — health checks, env defaults
+├── docker-compose.prod.yml       # Production — Docker Hub images, restart policies
 └── .github/workflows/
     └── docker-deploy.yml         # CI/CD pipeline
 ```
@@ -122,21 +123,25 @@ labari/
 ## Local Development
 
 ```bash
-# Full stack (postgres + backend + nginx)
-make docker-up            # http://localhost:3000
+# Start the full stack (postgres + backend + nginx)
+make docker-up        # → http://localhost:3000
 
-# Frontend only (hot reload)
-make dev-frontend         # http://localhost:3000
+# Frontend hot-reload only
+make dev-frontend     # → http://localhost:3000
 
-# Tear down and remove volumes
+# Tear down (removes volumes)
 make docker-down
 ```
 
-Backend environment variables (copy and edit before running locally):
+Set up backend environment before first run:
 
 ```bash
 cp backend-fastapi/.env.example backend-fastapi/.env
+# Edit JWT_SECRET — must be a strong random value:
+# openssl rand -hex 32
 ```
+
+The `docker-compose.yml` dev stack uses a built-in `JWT_SECRET` so you don't need to set one for local dev. For any standalone `uvicorn` run, the `.env` file is required.
 
 ---
 
@@ -144,21 +149,25 @@ cp backend-fastapi/.env.example backend-fastapi/.env
 
 **File:** `.github/workflows/docker-deploy.yml`
 
-```
-dev push  (infrastructure-ec2/** changed)
-  └── changes  →  provision
-                    ├── terraform apply   (EC2 + EIP + Route 53)
-                    └── ansible provision.yml  (Docker install + first deploy)
+A `changes` job runs first on every push to detect which paths changed. Subsequent jobs only run when relevant paths are affected.
 
-any push  (backend-fastapi/**, frontend/**, nginx/**)
-  └── build
-        ├── docker build + push  labari-backend → Docker Hub
-        └── docker build + push  labari-nginx   → Docker Hub
-
-main push
-  └── build  →  deploy
-                  └── ansible deploy.yml  (pull updated images + restart)
 ```
+push to dev  (infrastructure-ec2/** changed)
+  └── changes → provision
+                  ├── terraform apply        EC2 + EIP association + Route 53
+                  └── ansible provision.yml  Docker install + first stack deploy
+
+push to any branch  (backend-fastapi/**, frontend/**, nginx/**)
+  └── changes → build
+                  ├── docker build + push  labari-backend → Docker Hub :<sha>
+                  └── docker build + push  labari-nginx   → Docker Hub :<sha>
+
+push to main  (app files changed + build succeeded)
+  └── build → deploy
+                └── ansible deploy.yml  pull updated images + docker compose up -d
+```
+
+SSH keys are written to a unique temp file (`mktemp`) and deleted with `if: always()` after each Ansible run.
 
 ---
 
@@ -166,22 +175,22 @@ main push
 
 ### Prerequisites
 
-- AWS account with CLI configured
+- AWS account + CLI configured
 - Terraform ≥ 1.9
-- An existing Elastic IP (`eipalloc-…`) in your AWS account
+- An existing Elastic IP in your AWS account
 - A Route 53 hosted zone for your domain
-- EC2 key pair created in AWS
-- Docker Hub account — create two public repos: `labari-backend` and `labari-nginx`
+- An EC2 key pair
+- Docker Hub account with two repos: `labari-backend` and `labari-nginx`
 
 ### First-time provisioning
 
-Add all secrets (table below), then push any file change inside `infrastructure-ec2/` to the `dev` branch. The pipeline detects the changed path and runs `terraform apply` + `ansible/provision.yml` automatically.
+Add all secrets (table below), then push any file inside `infrastructure-ec2/` to the `dev` branch. CI runs `terraform apply` then `ansible/provision.yml` automatically.
 
-To run manually:
+To provision manually instead:
 
 ```bash
 cp infrastructure-ec2/terraform.tfvars.example infrastructure-ec2/terraform.tfvars
-# Edit: aws_region, key_name, domain_name, hosted_zone_id, eip_allocation_id
+# Fill in: aws_region, key_name, domain_name, hosted_zone_id, eip_allocation_id
 
 make ec2-init
 make ec2-apply
@@ -194,14 +203,15 @@ ansible-playbook ansible/provision.yml \
   -e "dockerhub_token=<token>" \
   -e "image_tag=latest" \
   -e "db_password=<pass>" \
-  -e "jwt_secret=<secret>" \
+  -e "jwt_secret=$(openssl rand -hex 32)" \
+  -e "domain_name=mailabari.com" \
   -e "aws_region=us-east-1" \
   -e "images_bucket="
 ```
 
 ### Ongoing deploys
 
-Push to `main`. The pipeline builds updated images and Ansible restarts the stack on EC2.
+Push to `main`. The pipeline builds new images (tagged with the commit SHA), then Ansible pulls them and restarts the stack with zero-downtime Compose recreation.
 
 ### GitHub Actions secrets
 
@@ -214,31 +224,52 @@ Push to `main`. The pipeline builds updated images and Ansible restarts the stac
 | `TF_LOCK_TABLE` | ✅ | DynamoDB table for state locking |
 | `DOMAIN_NAME` | ✅ | e.g. `mailabari.com` |
 | `HOSTED_ZONE_ID` | ✅ | Route 53 hosted zone ID |
-| `EIP_ALLOCATION_ID` | ✅ | Find with `aws ec2 describe-addresses --query 'Addresses[*].[AllocationId,PublicIp]' --output table` |
+| `EIP_ALLOCATION_ID` | ✅ | `aws ec2 describe-addresses --query 'Addresses[*].[AllocationId,PublicIp]' --output table` |
 | `EC2_KEY_NAME` | ✅ | EC2 key pair name |
 | `EC2_SSH_PRIVATE_KEY` | ✅ | Full contents of the `.pem` file |
 | `DOCKERHUB_USERNAME` | ✅ | Docker Hub username |
 | `DOCKERHUB_TOKEN` | ✅ | Docker Hub access token (hub.docker.com → Account Settings → Security) |
 | `DB_PASSWORD` | ✅ | Strong password for PostgreSQL |
-| `JWT_SECRET` | ✅ | `openssl rand -hex 32` |
+| `JWT_SECRET` | ✅ | `openssl rand -hex 32` — app refuses to start if this is not set |
 | `IMAGES_BUCKET` | ➖ | S3 bucket for image uploads — leave blank to disable |
+
+---
+
+## Security
+
+| Control | Implementation |
+| ------- | -------------- |
+| JWT secret validation | App fails at startup if `JWT_SECRET` is not overridden from the default |
+| CORS | Locked to `DOMAIN_NAME` in production; localhost in dev |
+| Security headers | `X-Frame-Options`, `X-Content-Type-Options`, `HSTS`, `Referrer-Policy`, `Permissions-Policy` via nginx |
+| Request size | `client_max_body_size 10M` in nginx |
+| Container user | Backend runs as non-root `appuser` |
+| Atomic counters | Like increment uses `UPDATE … RETURNING` — no read-modify-write race |
+| Schema migrations | Alembic — versioned, rollback-capable, runs before server starts |
+| Connection pool | `pool_size=10`, `max_overflow=20`, `pool_recycle=1800s` |
+| Health check | `/health` probes the database; returns `503` if DB is unreachable |
+| SSH key hygiene | Written to `mktemp`, deleted with `if: always()` after Ansible run |
+| Docs | Swagger UI disabled in production (`ENVIRONMENT=production`) |
 
 ---
 
 ## API Reference
 
+All endpoints are proxied through nginx on port 80. No separate API subdomain needed.
+
 | Method | Path | Auth | Description |
 | ------ | ---- | :--: | ----------- |
-| GET | `/posts` | | List published posts; optional `?category=aws` |
-| GET | `/posts/{id}` | | Get single post |
-| GET | `/search?q=…` | | Full-text search across title, excerpt, and content |
+| GET | `/posts?category=&limit=&offset=` | | Paginated list of published posts |
+| GET | `/posts/{id}` | | Single post |
+| GET | `/search?q=&limit=&offset=` | | Search title, excerpt, and content |
 | POST | `/posts` | JWT | Create post |
 | PUT | `/posts/{id}` | JWT | Update post |
 | DELETE | `/posts/{id}` | JWT | Delete post |
-| POST | `/posts/{id}/like` | | Increment like count |
+| POST | `/posts/{id}/like` | | Atomic like increment |
 | GET | `/posts/{id}/comments` | | List comments |
-| POST | `/posts/{id}/comments` | | Add a comment |
+| POST | `/posts/{id}/comments` | | Add comment |
 | DELETE | `/posts/{id}/comments/{comment_id}` | JWT | Delete comment |
-| POST | `/auth/register` | | Register — body: `email`, `password`, `name` |
+| POST | `/auth/register` | | Register — `email`, `password`, `name` |
 | POST | `/auth/login` | | Login — returns `token` + `user` |
-| POST | `/images/upload` | JWT | Get presigned S3 upload URL |
+| POST | `/images/upload` | JWT | Presigned S3 upload URL |
+| GET | `/health` | | DB-aware health check — `200 ok` or `503 degraded` |

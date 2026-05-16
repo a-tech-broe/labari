@@ -19,12 +19,20 @@ services:
     environment:
       DATABASE_URL: postgresql://labari:${DB_PASSWORD}@db:5432/labari
       JWT_SECRET: ${JWT_SECRET}
+      ENVIRONMENT: production
+      ALLOWED_ORIGINS: '["https://${DOMAIN_NAME}","https://www.${DOMAIN_NAME}"]'
       AWS_REGION: ${AWS_REGION:-us-east-1}
       IMAGES_BUCKET: ${IMAGES_BUCKET:-}
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
   nginx:
     image: ${DOCKERHUB_USERNAME}/labari-nginx:${IMAGE_TAG:-latest}
@@ -33,6 +41,11 @@ services:
     ports:
       - "80:80"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
 volumes:
   pg_data:
