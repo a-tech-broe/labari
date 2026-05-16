@@ -25,6 +25,11 @@ variable "hosted_zone_id" {
   type        = string
 }
 
+variable "eip_allocation_id" {
+  description = "Allocation ID of the existing Elastic IP to associate with the instance (e.g. eipalloc-0123456789abcdef0)"
+  type        = string
+}
+
 variable "environment" {
   description = "Environment tag"
   type        = string
