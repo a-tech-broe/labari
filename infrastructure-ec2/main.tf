@@ -88,7 +88,7 @@ resource "aws_acm_certificate_validation" "labari" {
 
 resource "aws_security_group" "alb" {
   name        = "labari-alb"
-  description = "Labari ALB — internet-facing HTTP/HTTPS"
+  description = "Labari ALB - internet-facing HTTP/HTTPS"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
@@ -122,7 +122,7 @@ resource "aws_security_group" "alb" {
 
 resource "aws_security_group" "labari" {
   name        = "labari-ec2"
-  description = "Labari EC2 — HTTP from ALB only, SSH from anywhere"
+  description = "Labari EC2 - HTTP from ALB only, SSH from anywhere"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
