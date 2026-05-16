@@ -14,12 +14,10 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 env:
-  REGISTRY: ghcr.io
-  BACKEND_IMAGE: ghcr.io/${{ github.repository }}/labari-backend
-  NGINX_IMAGE:   ghcr.io/${{ github.repository }}/labari-nginx
+  BACKEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/labari-backend
+  NGINX_IMAGE:   ${{ secrets.DOCKERHUB_USERNAME }}/labari-nginx
 
 jobs:
 
@@ -89,14 +87,13 @@ jobs:
           EOF
           ansible-playbook ansible/provision.yml \
             -i /tmp/inventory.ini \
-            -e "ghcr_token=${{ secrets.GHCR_TOKEN }}" \
-            -e "ghcr_user=${{ github.actor }}" \
-            -e "github_repository=${{ github.repository }}" \
+            -e "dockerhub_username=${{ secrets.DOCKERHUB_USERNAME }}" \
+            -e "dockerhub_token=${{ secrets.DOCKERHUB_TOKEN }}" \
             -e "image_tag=latest" \
             -e "db_password=${{ secrets.DB_PASSWORD }}" \
             -e "jwt_secret=${{ secrets.JWT_SECRET }}" \
             -e "aws_region=${{ secrets.AWS_REGION }}" \
-            -e "images_bucket=${{ secrets.IMAGES_BUCKET }}"
+            -e "images_bucket=${{ secrets.IMAGES_BUCKET || '' }}"
 
   # ── 2. Build & push Docker images (on any matching push) ────────────────────
   build:
@@ -106,12 +103,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log in to GHCR
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -157,10 +153,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region:            ${{ secrets.AWS_REGION }}
 
-      - name: Get EC2 IP from Terraform state
+      - name: Get EC2 IP
         id: ec2_ip
         run: |
-          pip install --quiet awscli
           IP=$(aws ec2 describe-instances \
             --filters "Name=tag:Name,Values=labari-prod" \
                       "Name=instance-state-name,Values=running" \
@@ -186,11 +181,10 @@ jobs:
           EOF
           ansible-playbook ansible/deploy.yml \
             -i /tmp/inventory.ini \
-            -e "ghcr_token=${{ secrets.GHCR_TOKEN }}" \
-            -e "ghcr_user=${{ github.actor }}" \
-            -e "github_repository=${{ github.repository }}" \
+            -e "dockerhub_username=${{ secrets.DOCKERHUB_USERNAME }}" \
+            -e "dockerhub_token=${{ secrets.DOCKERHUB_TOKEN }}" \
             -e "image_tag=${{ github.sha }}" \
             -e "db_password=${{ secrets.DB_PASSWORD }}" \
             -e "jwt_secret=${{ secrets.JWT_SECRET }}" \
             -e "aws_region=${{ secrets.AWS_REGION }}" \
-            -e "images_bucket=${{ secrets.IMAGES_BUCKET }}"
+            -e "images_bucket=${{ secrets.IMAGES_BUCKET || '' }}"

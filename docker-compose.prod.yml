@@ -15,7 +15,7 @@ services:
       retries: 10
 
   backend:
-    image: ghcr.io/${GITHUB_REPOSITORY}/labari-backend:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USERNAME}/labari-backend:${IMAGE_TAG:-latest}
     environment:
       DATABASE_URL: postgresql://labari:${DB_PASSWORD}@db:5432/labari
       JWT_SECRET: ${JWT_SECRET}
@@ -27,7 +27,7 @@ services:
     restart: unless-stopped
 
   nginx:
-    image: ghcr.io/${GITHUB_REPOSITORY}/labari-nginx:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USERNAME}/labari-nginx:${IMAGE_TAG:-latest}
     depends_on:
       - backend
     ports:
