@@ -1,5 +1,0 @@
-domain_name  = "yourdomain.com"
-environment  = "prod"
-aws_region   = "us-east-1"
-project_name = "labari"
-alert_email  = "your@email.com"
