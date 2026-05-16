@@ -137,11 +137,11 @@ jobs:
         if: always()
         run: rm -f "$KEY_FILE"
 
-  # ── 2. Build & push Docker images (only when app files changed) ─────────────
+  # ── 2. Build & push Docker images (only when app files changed, not on manual dispatch) ─────
   build:
     name: Build & Push Images
     needs: changes
-    if: needs.changes.outputs.app == 'true'
+    if: needs.changes.outputs.app == 'true' && github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
