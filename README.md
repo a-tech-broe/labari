@@ -107,6 +107,7 @@ labari/
 │   └── deploy.yml                # Pull updated images, restart stack
 │
 ├── frontend/
+│   ├── package-lock.json         # Lockfile — ensures reproducible Docker builds
 │   └── src/
 │       ├── app/                  # Home, post detail, admin pages
 │       ├── components/           # PostCard, LikeButton, CommentSection
@@ -159,15 +160,22 @@ push to dev  (infrastructure-ec2/** changed)
 
 push to any branch  (backend-fastapi/**, frontend/**, nginx/**)
   └── changes → build
-                  ├── docker build + push  labari-backend → Docker Hub :<sha>
-                  └── docker build + push  labari-nginx   → Docker Hub :<sha>
+                  ├── docker build + push  labari-backend → Docker Hub :<sha> + :latest
+                  └── docker build + push  labari-nginx   → Docker Hub :<sha> + :latest
 
 push to main  (app files changed + build succeeded)
   └── build → deploy
                 └── ansible deploy.yml  pull updated images + docker compose up -d
+
+workflow_dispatch on main  (manual re-deploy, no code change needed)
+  └── deploy → ansible deploy.yml  pull :latest images + docker compose up -d
 ```
 
 SSH keys are written to a unique temp file (`mktemp`) and deleted with `if: always()` after each Ansible run.
+
+#### Manual re-deploy
+
+If you need to redeploy without a code change (e.g., after first provisioning), go to **GitHub → Actions → Docker Deploy → Run workflow**, select `main`, and leave the image tag as `latest`. The deploy job runs immediately without rebuilding images.
 
 ---
 
@@ -211,7 +219,9 @@ ansible-playbook ansible/provision.yml \
 
 ### Ongoing deploys
 
-Push to `main`. The pipeline builds new images (tagged with the commit SHA), then Ansible pulls them and restarts the stack with zero-downtime Compose recreation.
+Push to `main`. The pipeline builds new images (tagged with the commit SHA and `:latest`), then Ansible pulls them and restarts the stack with zero-downtime Compose recreation.
+
+To redeploy without a code change, use the manual workflow dispatch described in the CI/CD section above.
 
 ### GitHub Actions secrets
 
