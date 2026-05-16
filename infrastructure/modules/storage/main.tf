@@ -5,7 +5,8 @@ locals {
 # --- Frontend bucket (served via CloudFront OAC, not public) ---
 
 resource "aws_s3_bucket" "frontend" {
-  bucket = "${local.name_prefix}-frontend-${var.account_id}"
+  bucket        = "${local.name_prefix}-frontend-${var.account_id}"
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_versioning" "frontend" {
@@ -29,7 +30,8 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
 # --- Images bucket (private; accessed via presigned URLs) ---
 
 resource "aws_s3_bucket" "images" {
-  bucket = "${local.name_prefix}-images-${var.account_id}"
+  bucket        = "${local.name_prefix}-images-${var.account_id}"
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "images" {
